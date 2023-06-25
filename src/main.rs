@@ -8,6 +8,7 @@ use actix_multipart::form::{tempfile::TempFile, MultipartForm, MultipartFormConf
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("Starting server.");
     std::fs::create_dir_all("files").expect("Should be able to create files dir.");
     HttpServer::new(move || {
         App::new()
@@ -47,6 +48,7 @@ async fn upload(
 
 #[get("/random")]
 async fn random() -> impl Responder {
+    
     use rand::seq::SliceRandom;
     let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
     let files = readdir
@@ -55,12 +57,14 @@ async fn random() -> impl Responder {
     let choice = files
         .choose(&mut rand::thread_rng())
         .expect("Should have at least one file");
+    let stringified = choice
+        .to_str()
+        .expect("Should be able to convert path to str.");
+    println!("Received `/random` request. Redirecting to `{stringified}`");
     HttpResponse::TemporaryRedirect()
         .append_header((
             "Location",
-            choice
-                .to_str()
-                .expect("Should be able to convert path to str."),
+            stringified,
         ))
         .finish()
 }
@@ -68,6 +72,7 @@ async fn random() -> impl Responder {
 #[get("/files/{filename}")]
 async fn get_file(path: web::Path<String>) -> actix_web::Result<impl Responder> {
     let path = path.into_inner();
+    println!("Received `/files/{path}` request.");
     match NamedFile::open_async(&format!("files/{path}")).await {
         Ok(file) => Ok(Either::Left(file)),
         Err(_) => Ok(Either::Right(HttpResponse::NotFound().body("Not Found"))),
@@ -76,6 +81,7 @@ async fn get_file(path: web::Path<String>) -> actix_web::Result<impl Responder> 
 
 #[get("/")]
 async fn index() -> impl Responder {
+    println!("Received `/` request.");
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(include_str!("../web/index.html"))
@@ -83,6 +89,7 @@ async fn index() -> impl Responder {
 
 #[get("/contents")]
 async fn contents() -> impl Responder {
+    println!("Received `/contents` request.");
     let body = {
         let mut body = String::new();
         let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
