@@ -16,6 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .service(index)
             .service(random)
             .service(upload)
+            .service(contents)
     })
     .bind(("0.0.0.0", 8080))?
     .workers(1)
@@ -78,4 +79,28 @@ async fn index() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(include_str!("../web/index.html"))
+}
+
+#[get("/contents")]
+async fn contents() -> impl Responder {
+    let body = {
+        let mut body = String::new();
+        let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
+        let files = readdir
+        .map(|i| i.expect("Should have access to file in local dir.").path().to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+        for s in files {
+            let link = format! {
+                "<a href=\"{s}\">{s}</a><br>",
+            };
+            body.push_str(&link);
+        }
+        if body.is_empty() {
+            body = "No files uploaded yet.".to_string();
+        }
+        body
+    };
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(body)
 }
