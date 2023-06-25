@@ -38,7 +38,7 @@ struct UploadForm {
 async fn upload(
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> Result<impl Responder, actix_web::Error> {
-    println!("Got here");
+    println!("Received upload request.");
     for f in form.files {
         let path = format!("./files/{}", f.file_name.unwrap());
         f.file.persist(path).unwrap();
