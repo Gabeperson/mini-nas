@@ -48,7 +48,6 @@ async fn upload(
 
 #[get("/random")]
 async fn random() -> impl Responder {
-    
     use rand::seq::SliceRandom;
     let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
     let files = readdir
@@ -93,9 +92,10 @@ async fn contents() -> impl Responder {
     let body = {
         let mut body = String::new();
         let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
-        let files = readdir
+        let mut files = readdir
         .map(|i| i.expect("Should have access to file in local dir.").path().to_string_lossy().to_string())
         .collect::<Vec<_>>();
+        files.sort_by(|a, b| a.trim().to_lowercase().cmp(&b.trim().to_lowercase()));
         for s in files {
             let link = format! {
                 "<a href=\"{s}\">{s}</a><br>",
