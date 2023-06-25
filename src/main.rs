@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .run()
     .await
     .ok();
-
+    println!("Server stopped. Exiting...");
     Ok(())
 }
 
