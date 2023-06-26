@@ -44,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .service(videojs_css)
             .service(videojs_js)
             .service(login)
+            .service(contents_raw)
     })
     .bind(("0.0.0.0", 8080))?
     .workers(1)
@@ -154,7 +155,7 @@ async fn videojs_js(_: Identity) -> impl Responder {
 async fn contents(_: Identity) -> impl Responder {
     println!("Received `/contents` request.");
     let body = {
-        let mut body = String::new();
+        let mut body = String::from("<h1>Contents</h1><br>");
         let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
         let mut files = readdir
         .map(|i| i.expect("Should have access to file in local dir.").path().to_string_lossy().to_string())
@@ -175,3 +176,30 @@ async fn contents(_: Identity) -> impl Responder {
         .content_type("text/html; charset=utf-8")
         .body(body)
 }
+
+#[get("/contentsraw")]
+async fn contents_raw(_: Identity) -> impl Responder {
+    println!("Received `/contentsraw` request.");
+    let body = {
+        let mut body = String::from("<h1>Raw files</h1><br>");
+        let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
+        let mut files = readdir
+        .map(|i| i.expect("Should have access to file in local dir.").path().to_string_lossy().to_string())
+        .collect::<Vec<_>>();
+        files.sort_by(|a, b| a.trim().to_lowercase().cmp(&b.trim().to_lowercase()));
+        for s in files {
+            let link = format! {
+                "<a href=\"{s}\">{s}</a><br>",
+            };
+            body.push_str(&link);
+        }
+        if body.is_empty() {
+            body = "No files uploaded yet.".to_string();
+        }
+        body
+    };
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(body)
+}
+
