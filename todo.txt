@@ -1,0 +1,9 @@
+allow uploading other things
+sequential uploading
+actual video viewer
+maybe leptos?
+identification/separate storages
+- storage limits?
+folder structure
+
+easy setup for nginx

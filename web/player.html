@@ -1,0 +1,38 @@
+<script src="/videojs.js"></script>
+<link href="/videojs.css" rel="stylesheet" />
+
+<video controls id="video" class="video-js" src="INSERT SOURCE HERE" data-setup="{}" style="object-fit: contain; height: 100%; width: 100%;"></video>
+
+
+<script>
+    document.body.onkeydown = (e) => {
+        let video = videojs.players.video;
+        e = e || window.event;
+        switch (e.code) {
+            case "ArrowLeft": {
+                video.currentTime(video.currentTime() - 10);
+                break;
+            }
+            case "ArrowRight": {
+                video.currentTime(video.currentTime() + 10);
+                break;
+            }
+            case "ArrowUp": {
+                video.volume(video.volume() + 0.1);
+                break;
+            }
+            case "ArrowDown": {
+                video.volume(video.volume() - 0.1);
+                break;
+            }
+            case "Space": {
+                if (video.paused()) {
+                    video.play();
+                } else {
+                    video.pause();
+                }
+                break;
+            }   
+        }
+    }
+</script>

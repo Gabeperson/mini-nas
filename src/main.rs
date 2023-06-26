@@ -18,6 +18,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .service(random)
             .service(upload)
             .service(contents)
+            .service(player)
+            .service(videojs_css)
+            .service(videojs_js)
     })
     .bind(("0.0.0.0", 8080))?
     .workers(1)
@@ -63,7 +66,7 @@ async fn random() -> impl Responder {
     HttpResponse::TemporaryRedirect()
         .append_header((
             "Location",
-            stringified,
+            format!("/player/{}", stringified),
         ))
         .finish()
 }
@@ -78,12 +81,36 @@ async fn get_file(path: web::Path<String>) -> actix_web::Result<impl Responder> 
     }
 }
 
+#[get("/player/{filename:.*}")]
+async fn player(filename: web::Path<String>) -> impl Responder {
+    println!("Received `/player/{filename}` request.");
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(include_str!("../web/player.html").replace("INSERT SOURCE HERE", &format!("/{}", filename.into_inner())))
+}
+
 #[get("/")]
 async fn index() -> impl Responder {
     println!("Received `/` request.");
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(include_str!("../web/index.html"))
+}
+
+#[get("/videojs.css")]
+async fn videojs_css() -> impl Responder {
+    println!("Received `/videojs.css` request.");
+    HttpResponse::Ok()
+        .content_type("text/css; charset=utf-8")
+        .body(include_str!("../web/videojs.css"))
+}
+
+#[get("/videojs.js")]
+async fn videojs_js() -> impl Responder {
+    println!("Received `/videojs.js` request.");
+    HttpResponse::Ok()
+        .content_type("text/javascript; charset=utf-8")
+        .body(include_str!("../web/videojs.js"))
 }
 
 #[get("/contents")]
@@ -98,7 +125,7 @@ async fn contents() -> impl Responder {
         files.sort_by(|a, b| a.trim().to_lowercase().cmp(&b.trim().to_lowercase()));
         for s in files {
             let link = format! {
-                "<a href=\"{s}\">{s}</a><br>",
+                "<a href=\"/player/{s}\">{s}</a><br>",
             };
             body.push_str(&link);
         }
