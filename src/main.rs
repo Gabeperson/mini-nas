@@ -1,17 +1,39 @@
 use std::path::PathBuf;
 
 use actix_files::NamedFile;
-use actix_web::HttpResponse;
-use actix_web::{get, post, web, App, Either, HttpServer, Responder};
+use actix_web::{HttpResponse, HttpRequest, HttpMessage};
+use actix_web::{get, post, web, App, Either, HttpServer, Responder, cookie::Key};
 
 use actix_multipart::form::{tempfile::TempFile, MultipartForm, MultipartFormConfig};
 
+use rand::distributions::{Alphanumeric, DistString};
+use actix_session::{storage::CookieSessionStore, SessionMiddleware};
+use actix_identity::{Identity, IdentityMiddleware};
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    if !std::path::Path::new("cookie.txt").exists() {
+        std::fs::write("cookie.txt", Alphanumeric.sample_string(&mut rand::thread_rng(), 200)).expect("Failed to write cookie.txt");
+    }
+
+    let key_string = std::fs::read_to_string("cookie.txt").expect("Should be encoded properly");    
+
+    let secret_key = Key::from(&key_string.as_bytes());
+
+
     println!("Starting server.");
     std::fs::create_dir_all("files").expect("Should be able to create files dir.");
     HttpServer::new(move || {
+
+        let session_middleware = SessionMiddleware::builder(CookieSessionStore::default(), secret_key.clone())
+        // disable secure cookie for local testing
+            .cookie_secure(false)
+            .build();
+
         App::new()
+            .wrap(IdentityMiddleware::default())
+            .wrap(session_middleware)
             .app_data(MultipartFormConfig::default().total_limit(5 * 1024 * 1024 * 1024)) // 5gb
             .service(get_file)
             .service(index)
@@ -21,6 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .service(player)
             .service(videojs_css)
             .service(videojs_js)
+            .service(login)
     })
     .bind(("0.0.0.0", 8080))?
     .workers(1)
@@ -50,7 +73,7 @@ async fn upload(
 }
 
 #[get("/random")]
-async fn random() -> impl Responder {
+async fn random(_: Identity) -> impl Responder {
     use rand::seq::SliceRandom;
     let readdir = std::fs::read_dir("files/").expect("Should have access to file in local dir.");
     let files = readdir
@@ -72,7 +95,7 @@ async fn random() -> impl Responder {
 }
 
 #[get("/files/{filename}")]
-async fn get_file(path: web::Path<String>) -> actix_web::Result<impl Responder> {
+async fn get_file(path: web::Path<String>, _: Identity) -> actix_web::Result<impl Responder> {
     let path = path.into_inner();
     println!("Received `/files/{path}` request.");
     match NamedFile::open_async(&format!("files/{path}")).await {
@@ -82,7 +105,7 @@ async fn get_file(path: web::Path<String>) -> actix_web::Result<impl Responder> 
 }
 
 #[get("/player/{filename:.*}")]
-async fn player(filename: web::Path<String>) -> impl Responder {
+async fn player(filename: web::Path<String>, _: Identity) -> impl Responder {
     println!("Received `/player/{filename}` request.");
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
@@ -90,15 +113,29 @@ async fn player(filename: web::Path<String>) -> impl Responder {
 }
 
 #[get("/")]
-async fn index() -> impl Responder {
+async fn index(user: Option<Identity>) -> impl Responder {
     println!("Received `/` request.");
-    HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(include_str!("../web/index.html"))
+    if let Some(_) = user {
+        HttpResponse::Ok()
+            .content_type("text/html; charset=utf-8")
+            .body(include_str!("../web/index.html"))
+    } else {
+        HttpResponse::Forbidden()
+            .body("Must login before proceeding.")
+    }
+}
+
+#[get("/login/auth")]
+async fn login(req: HttpRequest) -> impl Responder {
+    println!("Received `/login/auth` request.");
+    Identity::login(&req.extensions(), "user".into()).expect("Error in login function");
+    HttpResponse::TemporaryRedirect()
+        .append_header(("Location", "/"))
+        .finish()
 }
 
 #[get("/videojs.css")]
-async fn videojs_css() -> impl Responder {
+async fn videojs_css(_: Identity) -> impl Responder {
     println!("Received `/videojs.css` request.");
     HttpResponse::Ok()
         .content_type("text/css; charset=utf-8")
@@ -106,7 +143,7 @@ async fn videojs_css() -> impl Responder {
 }
 
 #[get("/videojs.js")]
-async fn videojs_js() -> impl Responder {
+async fn videojs_js(_: Identity) -> impl Responder {
     println!("Received `/videojs.js` request.");
     HttpResponse::Ok()
         .content_type("text/javascript; charset=utf-8")
@@ -114,7 +151,7 @@ async fn videojs_js() -> impl Responder {
 }
 
 #[get("/contents")]
-async fn contents() -> impl Responder {
+async fn contents(_: Identity) -> impl Responder {
     println!("Received `/contents` request.");
     let body = {
         let mut body = String::new();
