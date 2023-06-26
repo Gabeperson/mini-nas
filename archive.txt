@@ -1,0 +1,28 @@
+use rcgen::generate_simple_self_signed;
+use std::fs;
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+
+struct Args {
+    #[arg(long, default_value = "public_key.pem")]
+    public: String,
+    #[arg(long, default_value = "private_key.pem")]
+    private: String,
+}
+
+fn main() {
+    let args = Args::parse();
+    let domains: &[_] = &["localhost".to_string()];
+    let cert = generate_simple_self_signed(domains).unwrap();
+    fs::write(&args.public, cert.serialize_pem().expect("Failed to serialize public key")).expect("Failed to write public key.");
+    fs::write(&args.private, cert.serialize_private_key_pem()).expect("Failed to write private key.");
+    println! {
+        "Successfully generated public and private keys.
+        Public key location: {}
+        Private key location: {}
+        ",
+        fs::canonicalize(&args.public).expect("Failed to canonicalize public key.").display(),
+        fs::canonicalize(&args.private).expect("Failed to canonicalize private key.").display(),
+    }
+}
