@@ -2,7 +2,6 @@
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::io::Write;
-use std::path::Path;
 use std::time::Instant;
 
 use actix_files::NamedFile;
