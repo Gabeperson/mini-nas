@@ -1,4 +1,3 @@
-#![feature(once_cell)]
 use std::collections::HashMap;
 use std::fs::canonicalize;
 use std::io::Write;
@@ -18,20 +17,28 @@ use actix_identity::{Identity, IdentityMiddleware};
 use std::sync::{OnceLock, RwLock, Mutex};
 use serde::{Serialize, Deserialize};
 
-const DEFAULT_USER_LIMIT: usize = 1000 * 1000 * 1000 * 10; // 10gb
+const DEFAULT_USER_LIMIT: u64 = 1000 * 1000 * 1000 * 10; // 10gb
 const CONFIG_PATH: &'static str = "config/";
 const FILES_DIR: &'static str = "files";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct UserData {
-    max_data: usize,
+    max_data: u64,
     password: String,
+    current_data: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct SharedFile {
+    destruction_time: u64,
+    path: String,
 }
 
 impl UserData {
     fn new(p: String) -> Self {
         Self {
             max_data: DEFAULT_USER_LIMIT,
+            current_data: 0,
             password: p,
         }
     }
@@ -42,6 +49,10 @@ fn user_timeout() -> &'static Mutex<HashMap<String, Instant>> {
     USER_TIMEOUT.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn file_share_directory() -> &'static RwLock<HashMap<String, SharedFile>> {
+    static USER_TIMEOUT: OnceLock<RwLock<HashMap<String, SharedFile>>> = OnceLock::new();
+    USER_TIMEOUT.get_or_init(|| RwLock::new(HashMap::new()))
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 struct Users {
@@ -181,7 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
             "changelimit" | "limit" => {
-                let (username, limit) = match (split.next(), split.next().and_then(|l| byte_unit::Byte::from_str(l).ok()).and_then(|l| Some(l.get_bytes() as usize))) {
+                let (username, limit) = match (split.next(), split.next().and_then(|l| byte_unit::Byte::from_str(l).ok()).and_then(|l| Some(l.get_bytes() as u64))) {
                     (Some(username), Some(limit)) => (username, limit),
                     _ => {
                         println!("Invalid arguments. The `changelimit` command has the syntax `changelimit <username> <limit>`. (limit can be B, KB, MB, KiB, MiB, GiB, etc)");
@@ -265,13 +276,26 @@ async fn upload_form(
 ) -> Result<impl Responder, actix_web::Error> {
     //println!("Received upload request.");
     for f in form.files {
-        let path = format!("./files/{}", f.file_name.unwrap());
+        let mut user_list = users().write().unwrap();
+        let user_data = user_list.users.get_mut(&user.id().expect("Getting user id should not fail")).expect("If logged in, user should exist");
+        let file_length = f.file.as_file().metadata().expect("Shouldn't error on getting metadata").len();
+        if user_data.max_data < user_data.current_data + file_length {
+            // limit exceeded.
+            return Ok(HttpResponse::PayloadTooLarge().finish())
+        }
+        user_data.current_data += file_length;
+        drop(user_list);
+        let path = format!("./files/{}/{}", user.id().expect("Getting user id should not fail"), f.file_name.unwrap());
         f.file.persist(path).unwrap();
     }
-    todo!();
-    Ok(HttpResponse::Ok())
+    Ok(HttpResponse::Ok().finish())
 }
 
+#[post("/makesharelink/{filename}")]
+async fn create_share_link(user: Identity, path: web::Path<String>) -> impl Responder {
+    todo!();
+    ""
+}
 
 #[get("/files/{filename}")]
 async fn get_file(path: web::Path<String>, user: Identity) -> actix_web::Result<impl Responder> {
@@ -302,7 +326,7 @@ async fn player(filename: web::Path<String>, _: Identity) -> impl Responder {
 }
  */
 #[get("/upload")]
-async fn upload(user: Identity) -> impl Responder {
+async fn upload(_: Identity) -> impl Responder {
     //println!("Received `/` request.");
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
@@ -311,7 +335,6 @@ async fn upload(user: Identity) -> impl Responder {
 
 #[get("/login")]
 async fn login() -> impl Responder {
-    todo!();
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(include_str!("../web/login.html"))
@@ -349,10 +372,18 @@ async fn verify_login(req: HttpRequest, json: Json<LoginRequest>) -> impl Respon
         .body("Invalid username or password.")
 }
 
-#[get("/")]
-async fn share(req: HttpRequest) -> impl Responder {
-    todo!();
-    ""
+#[get("/share/<id>")]
+async fn share(id: web::Path<String>) -> actix_web::Result<impl Responder> {
+    let share_list = file_share_directory().read().unwrap();
+    let id = id.into_inner();
+    if let Some(f) = share_list.get(&id) {
+        match NamedFile::open_async(&f.path).await {
+            Ok(file) => Ok(Either::Left(file)),
+            Err(_) => Ok(Either::Right(HttpResponse::NotFound().body("Not Found"))),
+        }
+    } else {
+        Ok(Either::Right(HttpResponse::NotFound().body("Could not find the share id")))
+    }
 }
 
 /*
