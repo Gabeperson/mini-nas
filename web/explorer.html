@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<style>
+    body {
+        font-family: Arial, Helvetica, sans-serif
+    }
+    .topbar {
+        position: fixed;
+        width: 100vw;
+        height: 30px;
+        background-color: white;
+        left: 0px;
+        top: 0px;
+        display: flex;
+        flex-direction: row;
+        border: black 1px solid;
+        z-index: 10000000;
+    }
+    .topbaritems {
+        display: inline-block;
+        height: 30px;
+        text-align: center;
+        line-height: 30px;
+        color: black;
+        border: black 1px solid;
+        user-select: none;
+    }
+    .topbaritems:hover {
+        background-color: rgb(220, 220, 220);
+        cursor: pointer;
+    }
+    .rightaligned {
+        display: flex;
+        justify-content: flex-end;
+        width: 100%;
+        align-items: center;
+    }
+    .leftaligned {
+        display: flex;
+        justify-content: flex-start;
+        width: 100%;
+        align-items: center;
+    }  
+
+    .directory-wrapper {
+        position: absolute;
+        width: 100%;
+        height: calc(100vh - 60px - 32px);
+        background-color: rgb(231, 255, 253);
+        left: 0px;
+        top: 0px;
+        display: flex;
+        flex-direction: column;
+        margin-top: 70px;
+    }
+
+    .directory-item {
+        height: 25px;
+        background-color: rgb(206, 253, 248);
+        width: 80%;
+        padding: 5px;
+        line-height: 10px;
+        border: black 1px solid;
+        user-select: none;
+        display: inline;
+    }
+
+    .directory-item:hover {
+        background-color: rgb(155, 252, 242);
+    }
+
+    .directory-item-selected {
+        background-color: rgb(92, 255, 239) !important;
+    }
+
+    .inner-wrapper {
+        display: flex;
+        width: 100%;
+        margin-left: 50px;
+    }
+
+    .img {
+        height: 25px;
+        width: 25px;
+        margin: 5px;
+    }
+
+    #path {
+        padding: 5px;
+        border: black 1px solid;
+        user-select: none;
+        display: inline-block;
+        margin-left: 50px;
+        margin-top: 70px;
+        z-index: 1000;
+    }
+
+</style>
+
+<div class="topbar">
+    <div class="leftaligned">
+        <a href="/"><div class="topbaritems" id="username", style="width: 200px;">USERNAME_HERE</div></a>
+    </div>
+    <div class="rightaligned">
+        <a href="/logout"><div class="topbaritems" id="logout" style="width: 100px;">Log Out</div></a>
+    </div>
+</div>
+
+<div id="path">
+    <h2>
+        <!--
+        <a href="index">index</a> > <a href="index/folder1">folder1</a> > <a href="index/folder1/folder2">folder2</a>
+        -->
+        CURRENT_PATH_HERE
+    </h2>
+</div>
+
+<div class="directory-wrapper">
+    <!--
+    <div class="inner-wrapper"><img class="img" src="images/archive.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/audio.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/image.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/video.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/other.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/folder.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/document.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    -->
+    DIRECTORY_HERE
+</div>
+
+
+<script>
+    document.body.addEventListener("contextmenu", e => e.preventDefault());
+    document.body.addEventListener("click", () => {
+        selected.forEach(elem => elem.classList.remove("directory-item-selected"));
+        selected = new Set();
+        shiftselected = null;
+    })
+    const logout = document.getElementById("logout");
+    let selected = new Set();
+    let shiftselected;
+    let lastShiftClicked;
+    for (let elem of document.getElementsByClassName("directory-item")) {
+        elem.addEventListener("click", function(e) {
+            if (e.ctrlKey) {
+                // dont need to do anything else
+                shiftselected = elem;
+            } else if (e.shiftKey) {
+                if (shiftselected) {
+                    if (lastShiftClicked) {
+                        let currentIndex = parseInt(elem.getAttribute("data-index"));
+                        let previousIndex = parseInt(lastShiftClicked.getAttribute("data-index"));
+                        if (currentIndex < previousIndex) {
+                            for (let i = currentIndex; i <= previousIndex; i++) {
+                                let element = document.querySelector(`[data-index="${i}"]`);
+                                element.classList.remove("directory-item-selected");
+                                selected.add(element)
+                            }
+                        } else if (currentIndex > previousIndex) {
+                            for (let i = previousIndex; i <= currentIndex; i++) {
+                                let element = document.querySelector(`[data-index="${i}"]`);
+                                element.classList.remove("directory-item-selected");
+                                selected.add(element)
+                            }
+                        }
+                    }
+                    let currentIndex = parseInt(elem.getAttribute("data-index"));
+                    let previousIndex = parseInt(shiftselected.getAttribute("data-index"));
+                    if (currentIndex < previousIndex) {
+                        for (let i = currentIndex; i <= previousIndex; i++) {
+                            let element = document.querySelector(`[data-index="${i}"]`);
+                            element.classList.add("directory-item-selected");
+                            selected.add(element)
+                        }
+                    } else if (currentIndex > previousIndex) {
+                        for (let i = previousIndex; i <= currentIndex; i++) {
+                            let element = document.querySelector(`[data-index="${i}"]`);
+                            element.classList.add("directory-item-selected");
+                            selected.add(element)
+                        }
+                    }
+                    lastShiftClicked = elem;          
+                } else shiftselected = elem
+            } else {
+                selected.forEach(elem => elem.classList.remove("directory-item-selected")); 
+                selected = new Set();
+                shiftselected = elem;
+            }
+            elem.classList.add("directory-item-selected");
+            selected.add(elem);
+            e.stopPropagation();
+        })
+        elem.addEventListener("dblclick", e => {
+            window.location.href = elem.getAttribute("data-url");
+        })
+    }
+</script>
