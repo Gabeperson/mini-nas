@@ -419,7 +419,6 @@ async fn get_file(original_path: web::Path<String>, user: Identity) -> actix_web
             .filter(|s| !s.is_empty())
             .map(|c| {
                 long_path.push_str(format!("/{}", c).as_str());
-                dbg!(&long_path);
                 format! {
                     "<a href=\"{}\">{}</a>",
                     long_path,
