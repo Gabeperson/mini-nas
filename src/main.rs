@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fs::{canonicalize, read_dir};
 use std::io::Write;
-use std::path::{Component, PathBuf};
 use std::time::Instant;
 
 use actix_files::NamedFile;
@@ -16,12 +15,12 @@ use actix_session::{storage::CookieSessionStore, SessionMiddleware};
 use rand::distributions::{Alphanumeric, DistString};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::sync::{Mutex, OnceLock, RwLock};
+use std::sync::{OnceLock, RwLock};
 
 const DEFAULT_USER_LIMIT: u64 = 1000 * 1000 * 1000 * 10; // 10gb
-const CONFIG_PATH: &'static str = "config/";
-const FILES_DIR: &'static str = "files";
-const IP: &'static str = "127.0.0.1";
+const CONFIG_PATH: &str = "config/";
+const FILES_DIR: &str = "files";
+const IP: &str = "127.0.0.1";
 const PORT: u16 = 8080;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -41,21 +40,21 @@ impl UserData {
     }
 }
 
-fn user_timeout() -> &'static Mutex<HashMap<String, Instant>> {
-    static USER_TIMEOUT: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
-    USER_TIMEOUT.get_or_init(|| Mutex::new(HashMap::new()))
+fn user_timeout() -> &'static tokio::sync::Mutex<HashMap<String, Instant>> {
+    static USER_TIMEOUT: OnceLock<tokio::sync::Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    USER_TIMEOUT.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()))
 }
 
-fn save_file_share(h: &HashMap<String, PathBuf>) {
+fn save_file_share(h: &HashMap<String, String>) {
     std::fs::write(
         format!("{CONFIG_PATH}file_share.json"),
         serde_json::to_string(h).unwrap(),
     ).ok();
 }
 
-fn file_share_directory() -> &'static RwLock<HashMap<String, PathBuf>> {
-    static USER_TIMEOUT: OnceLock<RwLock<HashMap<String, PathBuf>>> = OnceLock::new();
-    USER_TIMEOUT.get_or_init(|| RwLock::new(HashMap::new()))
+fn file_share_directory() -> &'static tokio::sync::RwLock<HashMap<String, String>> {
+    static USER_TIMEOUT: OnceLock<tokio::sync::RwLock<HashMap<String, String>>> = OnceLock::new();
+    USER_TIMEOUT.get_or_init(|| tokio::sync::RwLock::new(HashMap::new()))
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -96,9 +95,9 @@ fn count_size(path: &str) -> u128 {
     calc
 }
 
-fn get_proper_icon(s: &PathBuf) -> &'static str {
+fn get_proper_icon(s: &String) -> &'static str {
     use infer::MatcherType::*;
-    let kind = infer::get_from_path(s).ok().and_then(|i| i.and_then(|i| Some(i.matcher_type()))).unwrap_or(Custom);
+    let kind = infer::get_from_path(s).ok().and_then(|i| i.map(|i| i.matcher_type())).unwrap_or(Custom);
     match kind {
         Archive => "/images/archive.png",
         Audio => "/images/audio.png",
@@ -125,8 +124,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut buffer = String::new();
         std::io::stdin().read_line(&mut buffer)?;
         let buffer = buffer.trim();
-        println!("");
-        let mut split = buffer.split(" ");
+        println!();
+        let mut split = buffer.split(' ');
         // just unwrap here because split's first should always exist.
         match split.next().unwrap() {
             "adduser" | "add" => {
@@ -229,8 +228,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     split.next(),
                     split
                         .next()
-                        .and_then(|l| byte_unit::Byte::from_str(l).ok())
-                        .and_then(|l| Some(l.get_bytes() as u64)),
+                        .and_then(|l| byte_unit::Byte::from_str(l).ok()).map(|l| l.get_bytes() as u64)
                 ) {
                     (Some(username), Some(limit)) => (username, limit),
                     _ => {
@@ -271,7 +269,7 @@ async fn async_main() -> Result<(), std::io::Error> {
         .expect("Failed to write cookie.txt");
     }
     let key_string = std::fs::read_to_string("cookie.txt").expect("Should be encoded properly");
-    let secret_key = Key::from(&key_string.as_bytes());
+    let secret_key = Key::from(key_string.as_bytes());
 
     //println!("Starting server.");
     std::fs::create_dir_all("files").expect("Should be able to create files dir.");
@@ -370,15 +368,15 @@ async fn create_share_link(user: Identity, path: web::Path<String>) -> impl Resp
     let path = path.into_inner();
     let canon = canonicalize(format!("files/{}/{}", id, path));
     let path = match canon {
-        Ok(path) => path,
+        Ok(path) => path.display().to_string(),
         Err(_) => return HttpResponse::NotFound().body("Not Found"),
     };
     let allowed =
-        canonicalize(format!("files/{}", id)).expect("Canonicalizing 'files' shouldn't fail");
-    if !path.starts_with(allowed) {
+        canonicalize(format!("files/{}", id)).expect("Canonicalizing 'files' shouldn't fail").display().to_string();
+    if !path.starts_with(&allowed) {
         return HttpResponse::NotFound().body("Not Found");
     }
-    let mut share_file_hashmap = file_share_directory().write().unwrap();
+    let mut share_file_hashmap = file_share_directory().write().await;
     let file_id = loop {
         let file_id = Alphanumeric.sample_string(&mut rand::thread_rng(), 50);
         if share_file_hashmap.contains_key(&file_id) {
@@ -417,29 +415,26 @@ async fn get_file(original_path: web::Path<String>, user: Identity) -> actix_web
     } else {
         let return_string = include_str!("../web/explorer.html");
         let mut long_path = String::from("/files");
-        let v = PathBuf::from(&original_path)
-            .components()
+        let v = original_path.split('/')
+            .filter(|s| !s.is_empty())
             .map(|c| {
-                if let Component::Normal(component) = c {
-                    long_path.push_str(format!("/{}", component.to_string_lossy()).as_str());
-                    format! {
-                        "<a href=\"{}\">{}</a>",
-                        long_path,
-                        component.to_string_lossy()
-                    }
-                } else {
-                    "".into()
+                long_path.push_str(format!("/{}", c).as_str());
+                dbg!(&long_path);
+                format! {
+                    "<a href=\"{}\">{}</a>",
+                    long_path,
+                    c
                 }
             })
-            .filter(|s| s != "")
             .collect::<Vec<String>>()
             .join(" / ");
+        let v = format!("<a href=\"/\">root</a> / {}", v);
         let entries = {
             let id_clone = id.clone();
             let (dirs, files) = match tokio::task::spawn_blocking(move || {
                 let mut dirs = vec![];
                 let mut files = vec![];
-                for (loop_index, entry) in read_dir(path).expect("Reading this directory should not fail").enumerate() {
+                for (loop_index, entry) in read_dir(format!("files/{id_clone}/{}", original_path)).expect("Reading this directory should not fail").enumerate() {
                     let entry = if let Ok(entry) = entry {
                         entry
                     } else {
@@ -448,12 +443,12 @@ async fn get_file(original_path: web::Path<String>, user: Identity) -> actix_web
                     let icon = if entry.file_type().expect("Shouldn't fail on opening this").is_dir() {
                         "/images/folder.png"
                     } else {
-                        get_proper_icon(&entry.path())
+                        get_proper_icon(&entry.path().display().to_string())
                     };
                     let entry_text = format! {
                         r#"<div class="inner-wrapper"><img class="img" src="{}"><div class="directory-item" data-url="{}" data-index="{loop_index}">{}</div></div>"#,
                         icon,
-                        entry.path().display().to_string().replacen(&format!("/{}", id_clone), "", 1),
+                        format!("/files/{}/{}", original_path, entry.file_name().to_string_lossy()),
                         entry.file_name().to_string_lossy(),
                     };
                     if entry.file_type().expect("Shouldn't fail on opening this").is_dir() {
@@ -527,7 +522,7 @@ struct LoginRequest {
 
 #[post("/login")]
 async fn verify_login(req: HttpRequest, json: Json<LoginRequest>) -> impl Responder {
-    let mut timer = user_timeout().lock().unwrap();
+    let mut timer = user_timeout().lock().await;
     if let Some(time) = timer.get(&json.username) {
         if time > &std::time::Instant::now() {
             return HttpResponse::TooManyRequests()
@@ -540,9 +535,9 @@ async fn verify_login(req: HttpRequest, json: Json<LoginRequest>) -> impl Respon
     );
     drop(timer);
     let json = json.into_inner();
-    let users_list = users().read().unwrap();
-    let random_duration = (&mut rand::thread_rng()).gen::<f32>() / 10.0;
+    let random_duration = rand::thread_rng().gen::<f32>() / 10.0;
     tokio::time::sleep(std::time::Duration::from_secs_f32(random_duration)).await;
+    let users_list = users().read().unwrap();
     if let Some(user) = users_list.users.get(&json.username) {
         if user.password == json.password {
             Identity::login(&req.extensions(), json.username.clone()).ok();
@@ -554,7 +549,7 @@ async fn verify_login(req: HttpRequest, json: Json<LoginRequest>) -> impl Respon
 
 #[get("/shared/<id>")]
 async fn share(id: web::Path<String>) -> actix_web::Result<impl Responder> {
-    let share_list = file_share_directory().read().unwrap();
+    let share_list = file_share_directory().read().await;
     let id = id.into_inner();
     if let Some(f) = share_list.get(&id) {
         match NamedFile::open_async(&f).await {
@@ -597,8 +592,7 @@ async fn index(user: Option<Identity>) -> impl Responder {
     let entries = {
         let id_clone = id.clone();
         let (dirs, files) = match tokio::task::spawn_blocking(move || {
-            let mut dirs = vec![];
-            let mut files = vec![];
+            let (mut dirs, mut files) = (Vec::new(), Vec::new());
             for (loop_index, entry) in read_dir(path).expect("Reading this directory should not fail").enumerate() {
                 let entry = if let Ok(entry) = entry {
                     entry
@@ -608,7 +602,7 @@ async fn index(user: Option<Identity>) -> impl Responder {
                 let icon = if entry.file_type().expect("Shouldn't fail on opening this").is_dir() {
                     "/images/folder.png"
                 } else {
-                    get_proper_icon(&entry.path())
+                    get_proper_icon(&entry.path().display().to_string())
                 };
                 let entry_text = format! {
                     r#"<div class="inner-wrapper"><img class="img" src="{}"><div class="directory-item" data-url="{}" data-index="{loop_index}">{}</div></div>"#,
@@ -621,7 +615,6 @@ async fn index(user: Option<Identity>) -> impl Responder {
                 } else {
                     files.push((entry_text, entry.file_name()))
                 }
-                
             }
             dirs.sort_by_key(|d| d.1.clone());
             files.sort_by_key(|f| f.1.clone());
@@ -636,7 +629,7 @@ async fn index(user: Option<Identity>) -> impl Responder {
     };
     let return_string = return_string
         .replace("USERNAME_HERE", &id)
-        .replace("CURRENT_PATH_HERE", "")
+        .replace("CURRENT_PATH_HERE", "<a href=\"/\">root</a>")
         .replace("DIRECTORY_HERE", &entries);
     HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
