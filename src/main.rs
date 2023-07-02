@@ -261,14 +261,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn async_main() -> Result<(), std::io::Error> {
-    if !std::path::Path::new("cookie.txt").exists() {
-        std::fs::write(
-            "cookie.txt",
-            Alphanumeric.sample_string(&mut rand::thread_rng(), 200),
-        )
-        .expect("Failed to write cookie.txt");
-    }
-    let key_string = std::fs::read_to_string("cookie.txt").expect("Should be encoded properly");
+    let key_string = Alphanumeric.sample_string(&mut rand::thread_rng(), 200);
     let secret_key = Key::from(key_string.as_bytes());
 
     //println!("Starting server.");
