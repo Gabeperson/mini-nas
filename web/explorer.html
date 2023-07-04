@@ -13,7 +13,7 @@
         display: flex;
         flex-direction: row;
         border: black 1px solid;
-        z-index: 10000000;
+        z-index: 10;
     }
     .topbaritems {
         display: inline-block;
@@ -91,7 +91,31 @@
         display: inline-block;
         margin-left: 50px;
         margin-top: 70px;
-        z-index: 1000;
+        z-index: 1;
+    }
+
+    #contextmenu {
+        width: 200px;
+        height: 500px;
+        position: absolute;
+        top: 0px;
+        left: 0px;
+        background-color: rgb(169, 218, 213);
+        display: none;
+    }
+
+    .contextmenuitem {
+        width: 200px;
+        height: 50px;
+        background-color: rgb(169, 218, 213);
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        z-index: 100;
+        line-height: 50px;
+        box-sizing: border-box;
+        padding: 10px;
+        user-select: none;
     }
 
 </style>
@@ -115,22 +139,29 @@
 </div>
 
 <div class="directory-wrapper">
-    <!--
-    <div class="inner-wrapper"><img class="img" src="images/archive.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
-    <div class="inner-wrapper"><img class="img" src="images/audio.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
-    <div class="inner-wrapper"><img class="img" src="images/image.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
-    <div class="inner-wrapper"><img class="img" src="images/video.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
-    <div class="inner-wrapper"><img class="img" src="images/other.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
+    
+    <div class="inner-wrapper"><img class="img" src="images/archive.png"><div class="directory-item" data-url="/url/to/item5" data-index="0">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/audio.png"><div class="directory-item" data-url="/url/to/item5" data-index="1">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/image.png"><div class="directory-item" data-url="/url/to/item5" data-index="2">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/video.png"><div class="directory-item" data-url="/url/to/item5" data-index="3">Item6</div></div>
+    <div class="inner-wrapper"><img class="img" src="images/other.png"><div class="directory-item" data-url="/url/to/item5" data-index="4">Item6</div></div>
     <div class="inner-wrapper"><img class="img" src="images/folder.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
-    <div class="inner-wrapper"><img class="img" src="images/document.png"><div class="directory-item" data-url="/url/to/item5" data-index="5">Item6</div></div>
-    -->
+    <div class="inner-wrapper"><img class="img" src="images/document.png"><div class="directory-item" data-url="/url/to/item5" data-index="6">Item6</div></div>
+    
     DIRECTORY_HERE
+</div>
+
+<div id="contextmenu">
+    <div class="contextmenuitem">Share</div>
 </div>
 
 
 <script>
+    
     document.body.addEventListener("contextmenu", e => e.preventDefault());
     document.body.addEventListener("click", () => {
+        let contextmenu = document.getElementById("contextmenu");
+        contextmenu.style.display = "none";
         selected.forEach(elem => elem.classList.remove("directory-item-selected"));
         selected = new Set();
         shiftselected = null;
@@ -140,6 +171,23 @@
     let shiftselected;
     let lastShiftClicked;
     for (let elem of document.getElementsByClassName("directory-item")) {
+        elem.addEventListener("contextmenu", function(e) {
+            let x = e.clientX;
+            let y = e.clientY;
+            let contextmenu = document.getElementById("contextmenu");
+            contextmenu.style.top = y + "px";
+            contextmenu.style.left = x + "px";
+            contextmenu.style.display = "block";
+            if (!selected.has(this)) {
+                for (let elem of selected) {
+                    elem.classList.remove("directory-item-selected");
+                }
+                selected = new Set();
+                elem.classList.add("directory-item-selected");
+                selected.add(elem)
+            }
+
+        })
         elem.addEventListener("click", function(e) {
             if (e.ctrlKey) {
                 // dont need to do anything else

@@ -1,6 +1,11 @@
 seperate functions and stuff into different files
+(at least the directory creation stuff)
 make sharing actually work
+(edit explorer to make "share", "video view" (maybe))
 implement copy, cut, paste, delete, rename, etc.
+(custom contextmenu event listener thingy)
 add video player
+(use player )
 add music player
 add drag to select
+actually add upload :P
